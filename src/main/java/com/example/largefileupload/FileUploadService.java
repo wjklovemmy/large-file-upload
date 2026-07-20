@@ -27,7 +27,7 @@ public class FileUploadService {
             @Value("${file.upload.temp-dir}") String tempDir,
             @Value("${file.upload.buffer-size}") int bufferSize,
             @Value("${file.upload.max-allow-file-size}") long maxAllowFileSize,
-            @Value("${file.upload.allowed-mime-list") List<String> allowedMimeList,
+            @Value("${file.upload.allowed-mime-list}") List<String> allowedMimeList,
             @Value("${file.upload.forbidden-extension-list}") List<String> forbiddenExtensionList
     ){
         if (uploadDir == null || uploadDir.isEmpty()) {
