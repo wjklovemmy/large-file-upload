@@ -1,18 +1,22 @@
 package com.example.largefileupload;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 
+@Slf4j
 @Service
 public class FileUploadService {
     private String uploadDir;
@@ -126,5 +130,92 @@ public class FileUploadService {
         file.transferTo(dest);
     }
 
+    /**
+     * 获取已上传的分片索引列表
+     *
+     * @param saveFileName
+     * @param totalChunks
+     * @return
+     */
+    public List<Integer> getUploadedChunks(String saveFileName, int totalChunks){
+        List<Integer> uploaded = new ArrayList<>();
+        // 存放分片的临时目录
+        String chunkDir = Paths.get(tempDir, saveFileName).toString();
+        // 此时仅仅是在内存中创建了几个文件/目录的抽象标识，并没有在磁盘上实际创建该目录
+        File dir = new File(chunkDir);
+        // 如果该文件的临时目录根本不存在，说明没有任何分片上传过，直接返回空的已经上传列表uploaded.这是一种快速失败（Fail-fast）机制，避免后续无效的循环检查
+        if (!dir.exists()) {
+            return uploaded;
+        }
+        // 假设分片索引从0到totalChunks-1，代码假设分片名为其索引值（例如：0、1、2、3...），且没有后缀名
+        // 逐个检查这些文件是否存在，若存在，则将索引加入到uploaded，uploaded是已经上传的文件分片列表
+        for (int i = 0; i < totalChunks; i++) {
+            if (new File(dir, String.valueOf(i)).exists()){
+                uploaded.add(i);
+            }
+        }
+        return uploaded;
+    }
 
+    /**
+     * 检查文件是否完整存在（用于秒传）
+     *
+     * @param saveFileName
+     * @param fileSize
+     * @return
+     */
+    public boolean isFileComplete(String saveFileName, long fileSize){
+        // saveFileName是最终保存的文件名，采用fileName+"_"+md5
+        String finalFilePath = Paths.get(uploadDir, saveFileName).toString();
+        File finalFile = new File(finalFilePath);
+        // 如果目标文件已经存在并且大小和请求中文件大小相同，则说明文件已经传输结束
+        return finalFile.exists() && (finalFile.length() == fileSize);
+    }
+
+    /**
+     * 合并分片，采用流式合并方式，合并一个分片将一个分片加载到内存，防止将所有的文件分片一次性加载到内存
+     *
+     * @param md5
+     * @param fileName
+     * @param fileSize
+     * @param totalChunks
+     * @throws IOException
+     */
+    public void mergeChunks(String md5, String fileName, long fileSize, int totalChunks) throws IOException {
+        String saveFileName = fileName + "_" + md5;
+        String chunkDir = Paths.get(tempDir, saveFileName).toString();
+        ReentrantLock fileLock = mergeLocks.computeIfAbsent(md5, k-> new ReentrantLock());
+        try {
+            fileLock.lock();
+            Path finalFilePath = Paths.get(uploadDir, saveFileName);
+            File finalFile = new File(finalFilePath.toString());
+            if (finalFile.exists() && (finalFile.length() == fileSize)) {
+                return;
+            }
+            Files.createDirectories(finalFilePath.getParent());
+            try (OutputStream mergedOutPutStream = new BufferedOutputStream(Files.newOutputStream(finalFilePath.toFile().toPath()))) {
+                for (int i = 0; i < totalChunks; i++) {
+                    Path chunkPath = Paths.get(chunkDir, String.valueOf(i));
+                    if (Files.exists(chunkPath)) {
+                        throw new IOException("Missing chunk:" + chunkPath);
+                    }
+                    try (InputStream chunkInputStream = new BufferedInputStream(Files.newInputStream(chunkPath.toFile().toPath()))) {
+                        byte[] buffer = new byte[bufferSize];
+                        int bytesRead;
+                        while ((bytesRead = chunkInputStream.read(buffer)) != -1) {
+                            mergedOutPutStream.write(buffer, 0, bytesRead);
+                        }
+                    }
+                    Files.delete(chunkPath);
+                }
+                mergedOutPutStream.flush();
+            }
+            new File(chunkDir).delete();
+        } catch (IOException e) {
+            log.error("合并分片失败", e);
+        } finally {
+            fileLock.unlock();
+            mergeLocks.remove(md5);
+        }
+    }
 }
