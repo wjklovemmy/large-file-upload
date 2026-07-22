@@ -1,7 +1,142 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="x-ua-compatible" content="IE=edge">
+    <title>高性能大文件上传系统</title>
+    <script src="./es6-promise.auto.min.js"></script>
+    <script src="./fetch.umd.min.js"></script>
+    <script src="./WorkerPool.js"></script>
+    <script src="./FileUploadComponent.js"></script>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            const fileInput = document.getElementById('fileInput');
+            const uploadList = document.getElementById('uploadList');
+            const concurrencySelect = document.getElementById('concurrency');
+            const clearBtn = document.getElementById('clearBtn');
+
+            // 创建大文件上传组件
+            const uploader = new FileUploadComponent();
+            let activeTasks = {};
+
+            // 文件选择事件
+            fileInput.addEventListener('change', function (e) {
+                const files = e.target.files;
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i];
+                    const taskId = uploader.addUploadTask(file);
+                    if (taskId != null) {
+                        activeTasks[taskId] = true;
+                        renderFileItem(taskId, file);
+                    }
+                }
+                fileInput.value = '';
+                toggleClearBtnShow();
+            });
+
+            // 清空列表事件
+            clearBtn.addEventListener('click', function () {
+                uploadList.innerHTML = '';
+                activeTasks = {};
+                clearBtn.className += ' hidden';
+            });
+
+            // 绑定上传组件事件
+            uploader.on('taskCreated', function (task){});
+            uploader.on('progressUpdate', function (data) {
+                const taskId = data.taskId;
+                const progress = data.progress;
+                const el = document.getElementById('file-' + taskId);
+                if (el) {
+                    el.querySelector('.progress-bar-inner').style.width = progress + '%';
+                    el.querySelector('.progress-text').innerText = progress + '%';
+                }
+            });
+            uploader.on('statusUpdate', function (data) {
+                const taskId = data.taskId;
+                const status = data.status;
+                const el = document.getElementById('file-' + taskId);
+                if (el) {
+                    el.querySelector('.status-badge').innerText = status;
+                }
+            });
+            uploader.on('uploadSuccess', function (task) {
+                console.log('文件 ' + task.file.name + ' 上传完成');
+            });
+            uploader.on('uploadError', function (data) {
+                console.error('文件 ' + data.task.file.name + ' 上传失败：', data.error);
+            });
+            uploader.on('mergeError', function (data) {
+                console.error('文件 ' + data.task.file.name + ' 合并失败：', data.error);
+            });
+            uploader.on('fileSizeExceeded', function (eventData) {
+                alert(eventData.message);
+            });
+            uploader.on('fileTypeInvalid', function (eventData) {
+                alert(eventData.message);
+            });
+
+            // 渲染单文件上传项DOM
+            function renderFileItem(taskId, file) {
+                if (taskId == null) return;
+                const div = document.createElement('div');
+                div.id = 'file-' + taskId;
+                div.className = 'file-item';
+                const totalChunks = Math.ceil(file.size / uploader.config.chunkSize);
+                div.innerHTML = '<div><div><h3 title="' + file.name + '">' + file.name + '</h3><p>' + uploader.formatSize(file.size) + ' . ' + totalChunks + ' 分片</p></div><div><span class="status-badge">准备中</span></div></div><div><div class="progress-bar"><div class="progress-bar-inner"></div></div></div><span class="progress-text">0%</span></div></div>';
+                uploadList.appendChild(div);
+            }
+
+            // 控制清空按钮显隐
+            function toggleClearBtnShow() {
+                let hasActiveTasks = false;
+                for (const k in activeTasks) {
+                    if (activeTasks.hasOwnProperty(k)) hasActiveTasks = true;
+                }
+                if (hasActiveTasks) {
+                    clearBtn.classList.remove('hidden');
+                } else {
+                    clearBtn.className = ' hidden';
+                }
+            }
+
+            // 扩展分片并数传递逻辑
+            const originalUploadChunks = uploader.uploadedChunks.bind(uploader);
+            uploader.uploadChunks = function (task) {
+                return originalUploadChunks(task, parseInt(concurrencySelect.value));
+            }
+        })
+    </script>
+</head>
 <body>
-<h1>hello word!!!</h1>
-<p>this is a html page</p>
+<div>
+    <header>
+        <h1>大文件极速上传</h1>
+        <p>支持秒传、分片并行上传、断点续传</p>
+    </header>
+
+    <div>
+        <div>
+            <p>请选择文件</p>
+            <input type="file" id="fileInput" multiple>
+        </div>
+        <div>
+            <div>
+                <span>并发数：</span>
+                <select id="concurrency">
+                    <option value="1"></option>
+                    <option value="3" selected></option>
+                    <option value="5"></option>
+                    <option value="10"></option>
+                </select>
+            </div>
+            <button id="clearBtn" class="hidden">清空列表</button>
+        </div>
+    </div>
+
+    <div id="uploadList"></div>
+</div>
 </body>
 </html>
