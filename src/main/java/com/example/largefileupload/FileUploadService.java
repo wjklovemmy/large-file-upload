@@ -182,24 +182,33 @@ public class FileUploadService {
      * @throws IOException
      */
     public void mergeChunks(String md5, String fileName, long fileSize, int totalChunks) throws IOException {
+        // 最终保存的文件名
         String saveFileName = fileName + "_" + md5;
+        // 历史保存合并后的文件目录
         String chunkDir = Paths.get(tempDir, saveFileName).toString();
+        // 获取或者创建针对此特定文件的合并锁
         ReentrantLock fileLock = mergeLocks.computeIfAbsent(md5, k-> new ReentrantLock());
         try {
             fileLock.lock();
+            // 检查是否已经在合并中或者已经完成（幂等性校验）
             Path finalFilePath = Paths.get(uploadDir, saveFileName);
             File finalFile = new File(finalFilePath.toString());
+            // 如果目标文件已经存在且大小相等，则直接返回，实现幂等
             if (finalFile.exists() && (finalFile.length() == fileSize)) {
                 return;
             }
+            // 确保最终文件目录存在
             Files.createDirectories(finalFilePath.getParent());
+            // 流式合并，按照顺序读取分片，追加写入最终文件
             try (OutputStream mergedOutPutStream = new BufferedOutputStream(Files.newOutputStream(finalFilePath.toFile().toPath()))) {
                 for (int i = 0; i < totalChunks; i++) {
                     Path chunkPath = Paths.get(chunkDir, String.valueOf(i));
-                    if (Files.exists(chunkPath)) {
+                    if (!Files.exists(chunkPath)) {
                         throw new IOException("Missing chunk:" + chunkPath);
                     }
+                    // 使用带缓冲的流进行读写，控制内存占用
                     try (InputStream chunkInputStream = new BufferedInputStream(Files.newInputStream(chunkPath.toFile().toPath()))) {
+                        // 创建缓冲区，可以根据实际情况调整
                         byte[] buffer = new byte[bufferSize];
                         int bytesRead;
                         while ((bytesRead = chunkInputStream.read(buffer)) != -1) {
@@ -210,11 +219,13 @@ public class FileUploadService {
                 }
                 mergedOutPutStream.flush();
             }
+            // 清理空目录
             new File(chunkDir).delete();
         } catch (IOException e) {
             log.error("合并分片失败", e);
         } finally {
             fileLock.unlock();
+            // 清理此文件的锁
             mergeLocks.remove(md5);
         }
     }

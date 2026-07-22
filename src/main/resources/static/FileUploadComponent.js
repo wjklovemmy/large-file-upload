@@ -2,9 +2,9 @@
  * FileUploadComponent.js是大文件上传的前端组件，实现文件合法性校验、文件分片、并发上传，断点计算与续传等功能，兼容IE11
  * FileUploadComponent.js会调用WorkerPool.js、worker.js
  */
-var FileUploadComponent = (function () {
+const FileUploadComponent = (function () {
     // 文件传输兼容默认配置，可以根据实际情况修改
-    var defaultConfig = {
+    const defaultConfig = {
         apiBase: 'http://localhost:8080/api/upload', // 服务器地址
         chunkSize: 2 * 1024 * 1024, // 文件分片大小，单位字节
         maxWorkers: 4, // 处理线程池中工作线程的数量
@@ -25,12 +25,12 @@ var FileUploadComponent = (function () {
         }
         // 合并自定义配置和默认配置，兼容IE11
         this.config = {};
-        for (var key in defaultConfig) {
+        for (const key in defaultConfig) {
             if (defaultConfig.hasOwnProperty(key)) {
                 this.config[key] = defaultConfig[key];
             }
         }
-        for (var customKey in config) {
+        for (const customKey in config) {
             if (config.hasOwnProperty(customKey)) {
                 this.config[customKey] = config[customKey];
             }
@@ -44,21 +44,21 @@ var FileUploadComponent = (function () {
     FileUploadComponent.prototype.validateFile = function (file, config) {
         // 1.大小校验
         if (config.maxAllowFileSize !== -1 && file.size > config.maxAllowFileSize) {
-            var errorMsg = '文件' + file.name + '大小超出系统限制的最大允许值，系统最大可上传文件大小为' + this.formatSize(this.config.maxAllowFileSize);
+            const errorMsg = '文件' + file.name + '大小超出系统限制的最大允许值，系统最大可上传文件大小为' + this.formatSize(this.config.maxAllowFileSize);
             return {valid: false, type: 'size', message: errorMsg};
         }
 
         // 2.不允许上传exe文件
-        var fileNameLower = file.name.toLowerCase();
+        const fileNameLower = file.name.toLowerCase();
         if (fileNameLower.indexOf('.exe', fileNameLower.length - 4) !== -1) {
             return {valid: false, type: 'type', message: '不允许上传exe类型的可执行文件'};
         }
 
         // 3.MIME类型白名单校验，修复原逻辑BUG
         if (config.allowedTypes && config.allowedTypes.length > 0) {
-            var isValidType = config.allowedTypes.some(function (type) {
+            const isValidType = config.allowedTypes.some(function (type) {
                 if (type.indexOf('/*', type.length -2) !== -1) {
-                    var prefix = type.split('/');
+                    const prefix = type.split('/');
                     return file.type.indexOf(prefix + '/') === 0;
                 }
                 return file.type === type;
@@ -75,19 +75,19 @@ var FileUploadComponent = (function () {
     // 添加上传任务
     FileUploadComponent.prototype.addUploadTask = function (file) {
         // 先进行文件合法性校验
-        var result = this.validateFile(file, this.config);
-        var _this = this;
+        const result = this.validateFile(file, this.config);
+        const _this = this;
 
         // 如果文件校验不通过，直接返回
         if (!result.valid) {
-            var eventName = result.type === 'size' ? 'fileSizeExceeded' : 'fileTypeInvalid';
+            const eventName = result.type === 'size' ? 'fileSizeExceeded' : 'fileTypeInvalid';
             this._emit(eventName, {fileName: file.name, message: result.message});
             return null;
         }
 
         // 文件校验通过，执行后续处理流程
-        var fileId = this.generateFileId(file); // 生成文件ID
-        var task = {
+        const fileId = this.generateFileId(file); // 生成文件ID
+        const task = {
             id: fileId, // 文件ID
             file: file, // 具体文件内容
             totalChunks: Math.ceil(file.size / this.config.chunkSize), // 文件总分片数量
@@ -113,8 +113,8 @@ var FileUploadComponent = (function () {
 
     // IE11兼容自定义UUID生成
     FileUploadComponent.prototype.generateFileId = function (file) {
-        var randomPart = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
-            var r = Math.random() *16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+        const randomPart = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+            const r = Math.random() *16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
         });
         return file.name + '-' + file.size + '-' + file.lastModified + '-' + randomPart;
@@ -122,13 +122,13 @@ var FileUploadComponent = (function () {
 
     // 上传主流程，Promise链式调用
     FileUploadComponent.prototype.startUpload = function (task) {
-        var _this = this;
+        const _this = this;
         task.status = 'checking';
         task.startTime = Date.now();
         this._emit('statusUpdate', {taskId: task.id, status: '检测中...'});
 
         return new Promise(function (resolve, reject) {
-            var pool = new WorkerPool('worker.js', _this.config.maxWorkers);
+            const pool = new WorkerPool('worker.js', _this.config.maxWorkers);
             _this._emit('statusUpdate', {taskId: task.id, status: '文件的MD5值计算中...'});
             pool.exec({file: task.file, chunkSize: _this.config.chunkSize})
                 .then(function (fileMD5) {
@@ -152,12 +152,12 @@ var FileUploadComponent = (function () {
                 })
                 .then(function (checkData) {
                     // 秒传成功逻辑
-                    if (check.Data.code === 200 && checkData.data && checkData.data.exists) {
+                    if (checkData.code === 200 && checkData.data && checkData.data.exists) {
                         task.status = 'completed';
                         task.progress = 100;
-                        var endTime = Date.now();
+                        const endTime = Date.now();
                         _this._emit('progressUpdate', {taskId: task.id, progress: 100});
-                        this._emit('statusUpdate', {
+                        _this._emit('statusUpdate', {
                             taskId: task.id,
                             status: '秒传成功，传输时间：' + _this.formatClockTime(task.startTime) + ',传输结束时间：' + _this.formatClockTime(endTime) + ',传输耗时：' + _this.getFormattedDuration(task.startTime, endTime)
                         });
@@ -189,11 +189,11 @@ var FileUploadComponent = (function () {
 
     // 并行调度所有待上传分片
     FileUploadComponent.prototype.uploadedChunks = function (task, concurrency) {
-        var uploadConcurrency = concurrency || this.config.defaultConcurrency;
-        var chunksToUpload = [];
-        var _this = this;
+        const uploadConcurrency = concurrency || this.config.defaultConcurrency;
+        const chunksToUpload = [];
+        const _this = this;
 
-        for (var i = 0; i < task.totalChunks; i++) {
+        for (let i = 0; i < task.totalChunks; i++) {
             if (!task.uploadedChunks[i]) {
                 chunksToUpload.push(i)
             }
@@ -203,12 +203,12 @@ var FileUploadComponent = (function () {
             return this.mergeChunks(task);
         }
 
-        var activeUploads = 0
-        var nextChunkIndex = 0;
-        var hasFatalError = false;
+        let activeUploads = 0
+        let nextChunkIndex = 0;
+        let hasFatalError = false;
 
         return new Promise(function (resolve, reject) {
-            var runNext = function () {
+            const runNext = function () {
                 if (task.status === 'paused' || hasFatalError) {
                     return;
                 }
@@ -218,9 +218,9 @@ var FileUploadComponent = (function () {
                 }
 
                 while (activeUploads < uploadConcurrency && nextChunkIndex < chunksToUpload.length) {
-                    var chunkIndex = chunksToUpload[nextChunkIndex++];
+                    const chunkIndex = chunksToUpload[nextChunkIndex++];
                     activeUploads++;
-                    _this.uploadSingleChunkWithRetry(task, chunIndex, 0)
+                    _this.uploadSingleChunkWithRetry(task, chunkIndex, 0)
                         .then(function () {
                             activeUploads--;
                             runNext();
@@ -243,11 +243,11 @@ var FileUploadComponent = (function () {
 
     // IE11兼容带重试的单分片上传
     FileUploadComponent.prototype.uploadSingleChunkWithRetry = function (task, chunkIndex, retryCount) {
-        var _this = this;
-        var start = chunkIndex * this.config.chunkSize;
-        var end = Math.min(start + this.config.chunkSize, task.file.size);
-        var chunk = task.file.slice(start, end);
-        var formData = new FormData();
+        const _this = this;
+        const start = chunkIndex * this.config.chunkSize;
+        const end = Math.min(start + this.config.chunkSize, task.file.size);
+        const chunk = task.file.slice(start, end);
+        const formData = new FormData();
         formData.append('file', chunk);
         formData.append('md5', task.md5);
         formData.append('fileName', task.file.name);
@@ -255,8 +255,8 @@ var FileUploadComponent = (function () {
         formData.append('totalChunks', task.totalChunks);
 
         return new Promise(function (resolve, reject) {
-            var isTimeout = false;
-            var timeoutId = setTimeout(function () {
+            let isTimeout = false;
+            const timeoutId = setTimeout(function () {
                 isTimeout = true;
                 reject(new Error('分片上传超时'));
             }, _this.config.chunkUploadTimeout);
@@ -279,9 +279,9 @@ var FileUploadComponent = (function () {
                     throw new Error(result.message || '服务器返回上传失败');
                 }
                 task.uploadedChunks[chunkIndex] = true;
-                var uploadedCount = 0;
-                for (var k in task.uploadedChunks) uploadedCount++;
-                var currentProgress = Math.round(uploadedCount / task.totalChunks * 100);
+                let uploadedCount = 0;
+                for (const k in task.uploadedChunks) uploadedCount++;
+                const currentProgress = Math.round(uploadedCount / task.totalChunks * 100);
                 task.progress = currentProgress;
                 _this._emit('progressUpdate', {taskId: task.id, progress: currentProgress});
                 resolve(result);
@@ -289,7 +289,7 @@ var FileUploadComponent = (function () {
                 clearTimeout(timeoutId);
                 if (isTimeout) return;
                 if (retryCount < _this.config.retryConfig.maxRetries) {
-                    var delay = _this.config.retryConfig.retryDelay * Math.pow(_this.config.retryConfig.backoffFactor, retryCount);
+                    const delay = _this.config.retryConfig.retryDelay * Math.pow(_this.config.retryConfig.backoffFactor, retryCount);
                     _this.sleep(delay).then(function () {
                         _this.uploadSingleChunkWithRetry(task, chunkIndex, retryCount + 1).then(resolve)['catch'](reject);
                     });
@@ -302,7 +302,7 @@ var FileUploadComponent = (function () {
 
     // 请求后端合并所有已上传分片
     FileUploadComponent.prototype.mergeChunks = function (task) {
-        var _this = this;
+        const _this = this;
         this._emit('statusUpdate', {taskId: task.id, status: '合并中...'});
         return new Promise(function (resolve, reject) {
             fetch(_this.config.apiBase + '/merge', {
@@ -321,7 +321,7 @@ var FileUploadComponent = (function () {
                     task.status = 'completed';
                     task.progress = 100;
                     _this._emit('progessUpdate', {taskId: task.id, progress: 100});
-                    var endTime = Date.now();
+                    const endTime = Date.now();
                     _this._emit('statusUpdate', {
                         taskId: task.id,
                         status: '完成，传输开始时间：' + _this.formatClockTime(task.startTime) + ',传输结束时间：' + _this.formatClockTime(endTime) + ',传输时间：' + _this.getFormattedDuration(task.startTime, endTime)
@@ -345,31 +345,31 @@ var FileUploadComponent = (function () {
     // 格式化文件大小输出函数
     FileUploadComponent.prototype.formatSize = function (bytes) {
         if (bytes === 0) return '0 B';
-        var k = 1024;
-        var sizes = ['B', 'KB', 'MB', 'GB'];
-        var i = Math.floor(Math.log(bytes) / Math.log(k));
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     };
 
     // 格式化时间输出函数
     FileUploadComponent.prototype.formatClockTime = function (timestamp) {
-        var date = new Date(timestamp);
-        var hours = ('0' + date.getHours()).slice(-2);
-        var minutes = ('0' + date.getMinutes()).slice(-2);
-        var seconds = ('0' + date.getSeconds()).slice(-2);
-        var ms = ('00' + date.getMilliseconds()).slice(-3);
+        const date = new Date(timestamp);
+        const hours = ('0' + date.getHours()).slice(-2);
+        const minutes = ('0' + date.getMinutes()).slice(-2);
+        const seconds = ('0' + date.getSeconds()).slice(-2);
+        const ms = ('00' + date.getMilliseconds()).slice(-3);
         return hours + ":" + minutes + ":" + seconds + ":" + ms;
     }
 
     // 计算传输时间间隔并格式化输出函数
     FileUploadComponent.prototype.getFormattedDuration = function (startMs, endMs) {
-        var diff = endMs -startMs;
-        var ms = diff % 1000;
-        var seconds = Math.floor((diff / 1000) % 60);
-        var minutes = Math.floor((diff / (1000 * 60)) % 60);
-        var hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-        var pad = function (num) {return ('0' + num).slice(-2);};
-        var padMs = function (num) {return ('00' + num).slice(-3);};
+        const diff = endMs -startMs;
+        const ms = diff % 1000;
+        const seconds = Math.floor((diff / 1000) % 60);
+        const minutes = Math.floor((diff / (1000 * 60)) % 60);
+        const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+        const pad = function (num) {return ('0' + num).slice(-2);};
+        const padMs = function (num) {return ('00' + num).slice(-3);};
         return pad(hours) + ":" + pad(minutes) + ":" + pad(seconds) + "." + padMs(ms);
     }
 

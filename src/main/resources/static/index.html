@@ -85,7 +85,7 @@
                 div.id = 'file-' + taskId;
                 div.className = 'file-item';
                 const totalChunks = Math.ceil(file.size / uploader.config.chunkSize);
-                div.innerHTML = '<div><div><h3 title="' + file.name + '">' + file.name + '</h3><p>' + uploader.formatSize(file.size) + ' . ' + totalChunks + ' 分片</p></div><div><span class="status-badge">准备中</span></div></div><div><div class="progress-bar"><div class="progress-bar-inner"></div></div></div><span class="progress-text">0%</span></div></div>';
+                div.innerHTML = '<div><div><h3 title="' + file.name + '">' + file.name + '</h3><p>' + uploader.formatSize(file.size) + ' . ' + totalChunks + ' 分片</p></div><div><span class="status-badge">准备中</span></div></div><div><div class="progress-bar"><div class="progress-bar-inner"></div></div><div><span class="progress-text">0%</span></div></div>';
                 uploadList.appendChild(div);
             }
 
@@ -126,10 +126,10 @@
             <div>
                 <span>并发数：</span>
                 <select id="concurrency">
-                    <option value="1"></option>
-                    <option value="3" selected></option>
-                    <option value="5"></option>
-                    <option value="10"></option>
+                    <option value="1">1</option>
+                    <option value="3" selected>3</option>
+                    <option value="5">5</option>
+                    <option value="10">10</option>
                 </select>
             </div>
             <button id="clearBtn" class="hidden">清空列表</button>
